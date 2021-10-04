@@ -1140,11 +1140,12 @@ data Action =
   | DrinkPotion
   | CastSpell
   | RunAway
-  deriving (Enum)
+  deriving (Show, Enum)
 
 class Fighter f where
   act :: f -> (f, Int)
   damage :: f -> Int -> f
+  action :: f -> Action
   nextAction :: f -> Action
   health :: f -> Int
 
@@ -1153,11 +1154,13 @@ data Knight = Knight
   , knightAttack :: Int
   , knightDefense :: Int
   , knightAction :: Action }
+  deriving (Show)
 
 data Monster = Monster
   { monsterHealth :: Int
   , monsterAttack :: Int
   , monsterAction :: Action }
+  deriving (Show)
 
 instance Fighter Knight where
   act :: Knight -> (Knight, Int)
@@ -1178,6 +1181,8 @@ instance Fighter Knight where
     let realDamage = max 0 (attack - knightDefense knight)
         newHealth = knightHealth knight - realDamage
     in  knight { knightHealth = newHealth }
+  action :: Knight -> Action
+  action = knightAction
   nextAction :: Knight -> Action
   nextAction knight = case knightAction knight of
     CastSpell -> Attack
@@ -1195,6 +1200,8 @@ instance Fighter Monster where
   damage :: Monster -> Int -> Monster
   damage monster attack =
     monster { monsterHealth = monsterHealth monster - attack }
+  action :: Monster -> Action
+  action = monsterAction
   nextAction :: Monster -> Action
   nextAction monster = case monsterAction monster of
     Attack -> RunAway
@@ -1207,13 +1214,15 @@ fight a b =
   let (tmpA, aAttack) = act a
       (newB, bAttack) = act (damage b aAttack)
       newA = damage tmpA bAttack
-  in case (nextAction a, nextAction b) of
-    (RunAway, _) -> Right b
-    (_, RunAway) -> Left a
+  in case (action a, action b) of
+    (RunAway, _) -> Right newB
+    (_, RunAway) -> Left newA
     _ -> case (health newA, health newB) of
-      (0, _) -> Right b
-      (_, 0) -> Left a
-      _ -> fight newB newA
+      (0, _) -> Right newB
+      (_, 0) -> Left newA
+      _ -> case fight newB newA of
+        Left b -> Right b
+        Right a -> Left a
 
 knight = Knight { knightHealth = 10, knightAttack = 3, knightDefense = 2, knightAction = Attack }
 monster = Monster {monsterHealth = 5, monsterAttack = 1, monsterAction = Attack }
