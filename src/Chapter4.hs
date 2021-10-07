@@ -319,7 +319,7 @@ data List a
 
 instance Functor List where
     fmap :: (a -> b) -> List a -> List b
-    fmap f (Cons h t) = Cons (f h) (fmap f t)
+    fmap f (Cons x xs) = Cons (f x) (fmap f xs)
     fmap _ Empty = Empty
 
 {- |
@@ -512,11 +512,11 @@ instance Applicative List where
 
   (<*>) :: List (a -> b) -> List a -> List b
   (<*>) Empty _ = Empty
-  (<*>) (Cons f rest) args = concatList (fmap f args) (rest <*> args)
+  (<*>) (Cons x xs) args = concatList (fmap x args) (xs <*> args)
 
 concatList :: List a -> List a -> List a
 concatList Empty l = l
-concatList (Cons h t) l = Cons h (concatList t l)
+concatList (Cons x xs) l = Cons x (concatList xs l)
 
 {- |
 =🛡= Monad
@@ -641,12 +641,11 @@ Implement the 'Monad' instance for our lists.
 -}
 flattenList :: List (List a) -> List a
 flattenList Empty = Empty
-flattenList (Cons h t) = concatList h (flattenList t)
+flattenList (Cons x xs) = concatList x (flattenList xs)
 
 instance Monad List where
     (>>=) :: List a -> (a -> List b) -> List b
-    (>>=) Empty _ = Empty
-    (>>=) (Cons h t) f = concatList (f h) (t >>= f)
+    l >>= f = flattenList (fmap f l)
 
 {- |
 =💣= Task 8*: Before the Final Boss
@@ -665,11 +664,7 @@ Can you implement a monad version of AND, polymorphic over any monad?
 🕯 HINT: Use "(>>=)", "pure" and anonymous function
 -}
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM l r = l >>= (\a ->
-  if a then
-    r >>= (\b -> pure (a && b))
-  else
-    pure False)
+andM ma mb = ma >>= \a -> if a then mb else pure False
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
@@ -712,22 +707,22 @@ Specifically,
    subtree of a tree
  ❃ Implement the function to convert Tree to list
 -}
-data BinaryTree t = BinaryTree
-  { bTreeNode :: t
-  , bTreeLeft :: Maybe (BinaryTree t)
-  , bTreeRight :: Maybe (BinaryTree t) }
+data Tree a =
+  Leaf
+  | Node a (Tree a) (Tree a)
 
-instance Functor BinaryTree where
-    fmap :: (a -> b) -> BinaryTree a -> BinaryTree b
-    fmap f (BinaryTree node left right) = BinaryTree (f node) (fmap (fmap f) left) (fmap (fmap f) right)
+instance Functor Tree where
+    fmap :: (a -> b) -> Tree a -> Tree b
+    fmap _ Leaf = Leaf
+    fmap f (Node x l r) = Node (f x) (fmap f l) (fmap f r)
 
-reverseTree :: BinaryTree t -> BinaryTree t
-reverseTree (BinaryTree node left right) = BinaryTree node (fmap reverseTree right) (fmap reverseTree left)
+reverseTree :: Tree a -> Tree a
+reverseTree Leaf = Leaf
+reverseTree (Node x l r) = Node x (reverseTree l) (reverseTree r)
 
-treeToList :: BinaryTree t -> [t]
-treeToList (BinaryTree node Nothing Nothing) = [node]
-treeToList (BinaryTree node (Just left) Nothing) = node : (treeToList left)
-treeToList (BinaryTree node Nothing (Just right)) = node : (treeToList right)
+treeToList :: Tree a -> [a]
+treeToList Leaf = []
+treeToList (Node x l r) = x : treeToList l ++ treeToList r
 
 {-
 You did it! Now it is time to open pull request with your changes
