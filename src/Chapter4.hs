@@ -114,22 +114,30 @@ As always, try to guess the output first! And don't forget to insert
 the output in here:
 
 >>> :k Char
+Char :: *
 
 >>> :k Bool
+Bool :: *
 
 >>> :k [Int]
+[Int] :: *
 
 >>> :k []
+[] :: * -> *
 
 >>> :k (->)
+(->) :: * -> * -> *
 
 >>> :k Either
+Either :: * -> * -> *
 
 >>> data Trinity a b c = MkTrinity a b c
 >>> :k Trinity
+Trinity :: * -> * -> * -> *
 
 >>> data IntBox f = MkIntBox (f Int)
 >>> :k IntBox
+IntBox :: (* -> *) -> *
 
 -}
 
@@ -293,7 +301,8 @@ values and apply them to the type level?
 -}
 instance Functor (Secret e) where
     fmap :: (a -> b) -> Secret e a -> Secret e b
-    fmap = error "fmap for Box: not implemented!"
+    fmap f (Reward a) = Reward (f a)
+    fmap _ (Trap e) = Trap e
 
 {- |
 =⚔️= Task 3
@@ -306,6 +315,12 @@ typeclasses for standard data types.
 data List a
     = Empty
     | Cons a (List a)
+    deriving (Show)
+
+instance Functor List where
+    fmap :: (a -> b) -> List a -> List b
+    fmap f (Cons h t) = Cons (f h) (fmap f t)
+    fmap _ Empty = Empty
 
 {- |
 =🛡= Applicative
@@ -472,10 +487,12 @@ Implement the Applicative instance for our 'Secret' data type from before.
 -}
 instance Applicative (Secret e) where
     pure :: a -> Secret e a
-    pure = error "pure Secret: Not implemented!"
+    pure a = Reward a
 
     (<*>) :: Secret e (a -> b) -> Secret e a -> Secret e b
-    (<*>) = error "(<*>) Secret: Not implemented!"
+    (<*>) (Reward f) (Reward a) = Reward (f a)
+    (<*>) (Trap e) _ = Trap e
+    (<*>) _ (Trap e) = Trap e
 
 {- |
 =⚔️= Task 5
@@ -489,6 +506,17 @@ Implement the 'Applicative' instance for our 'List' type.
   type.
 -}
 
+instance Applicative List where
+  pure :: a -> List a
+  pure a = Cons a Empty
+
+  (<*>) :: List (a -> b) -> List a -> List b
+  (<*>) Empty _ = Empty
+  (<*>) (Cons f rest) args = concatList (fmap f args) (rest <*> args)
+
+concatList :: List a -> List a -> List a
+concatList Empty l = l
+concatList (Cons h t) l = Cons h (concatList t l)
 
 {- |
 =🛡= Monad
@@ -600,7 +628,8 @@ Implement the 'Monad' instance for our 'Secret' type.
 -}
 instance Monad (Secret e) where
     (>>=) :: Secret e a -> (a -> Secret e b) -> Secret e b
-    (>>=) = error "bind Secret: Not implemented!"
+    (>>=) (Trap e) _ = Trap e
+    (>>=) (Reward a) f = f a
 
 {- |
 =⚔️= Task 7
@@ -610,7 +639,14 @@ Implement the 'Monad' instance for our lists.
 🕯 HINT: You probably will need to implement a helper function (or
   maybe a few) to flatten lists of lists to a single list.
 -}
+flattenList :: List (List a) -> List a
+flattenList Empty = Empty
+flattenList (Cons h t) = concatList h (flattenList t)
 
+instance Monad List where
+    (>>=) :: List a -> (a -> List b) -> List b
+    (>>=) Empty _ = Empty
+    (>>=) (Cons h t) f = concatList (f h) (t >>= f)
 
 {- |
 =💣= Task 8*: Before the Final Boss
@@ -629,7 +665,11 @@ Can you implement a monad version of AND, polymorphic over any monad?
 🕯 HINT: Use "(>>=)", "pure" and anonymous function
 -}
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM = error "andM: Not implemented!"
+andM l r = l >>= (\a ->
+  if a then
+    r >>= (\b -> pure (a && b))
+  else
+    pure False)
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
@@ -672,7 +712,22 @@ Specifically,
    subtree of a tree
  ❃ Implement the function to convert Tree to list
 -}
+data BinaryTree t = BinaryTree
+  { bTreeNode :: t
+  , bTreeLeft :: Maybe (BinaryTree t)
+  , bTreeRight :: Maybe (BinaryTree t) }
 
+instance Functor BinaryTree where
+    fmap :: (a -> b) -> BinaryTree a -> BinaryTree b
+    fmap f (BinaryTree node left right) = BinaryTree (f node) (fmap (fmap f) left) (fmap (fmap f) right)
+
+reverseTree :: BinaryTree t -> BinaryTree t
+reverseTree (BinaryTree node left right) = BinaryTree node (fmap reverseTree right) (fmap reverseTree left)
+
+treeToList :: BinaryTree t -> [t]
+treeToList (BinaryTree node Nothing Nothing) = [node]
+treeToList (BinaryTree node (Just left) Nothing) = node : (treeToList left)
+treeToList (BinaryTree node Nothing (Just right)) = node : (treeToList right)
 
 {-
 You did it! Now it is time to open pull request with your changes
